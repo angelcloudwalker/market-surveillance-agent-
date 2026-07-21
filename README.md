@@ -1212,12 +1212,11 @@ Esta expansión es potencial y no forma parte del roadmap inmediato. El MVP y el
 
 ## Estado del proyecto
 
-🟡 En desarrollo — arquitectura definida, implementación en curso conforme avanza el estudio de Strands Agents.
+🟡 En desarrollo — arquitectura definida, implementación en curso.
 
 ## Siguientes pasos
 
-1. Concluir el curso de Strands Agents (lecciones 07-14)
-2. Diseñar el esquema de base de datos
+1. Diseñar el esquema de base de datos
 3. Generar dataset sintético con operaciones normales y sospechosas
 4. Implementar MVP: agente de structuring + agente de wash trading + orquestador
 5. Integrar steering handlers para el flujo de aprobación del OPLE
@@ -1395,6 +1394,127 @@ Esta naturaleza puntual tiene implicaciones arquitectónicas directas:
 | Streaming de respuesta | Deseable | No necesario |
 | Proceso permanentemente levantado | Necesario | No aplica — cron nocturno |
 
-La infraestructura resultante es intencionalmente simple: un script Python ejecutado por un cron al cierre de jornada sobre un EC2, consultando PostgreSQL e invocando Bedrock únicamente con las operaciones que superaron el filtro de reglas determinísticas.
+La infraestructura resultante es intencionalmente simple: una función Lambda disparada por EventBridge al cierre de jornada, consultando RDS PostgreSQL e invocando Bedrock únicamente con las operaciones que superaron el filtro de reglas determinísticas.
 
 Toda la complejidad del sistema reside en la calidad del diagnóstico — la precisión de los criterios de detección, la solidez del marco regulatorio y la capacidad del agente para distinguir una operación legítima de un indicio de manipulación. No en la infraestructura.
+
+---
+
+<!-- ESTRUCTURA_PROYECTO_START -->
+## Estructura del proyecto
+
+> Este apartado es la referencia canónica de la organización del repositorio.
+> Buscar `ESTRUCTURA_PROYECTO_START` para localizar esta sección rápidamente.
+
+```
+market-surveillance-agent/
+│
+├── infra/
+│   ├── simulator/                          # Terraform — BD simulada de la casa de bolsa
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   ├── outputs.tf
+│   │   ├── rds.tf                          # RDS PostgreSQL con datos sintéticos
+│   │   └── seed/
+│   │       ├── 01_schema.sql
+│   │       ├── 02_instrumentos.sql
+│   │       ├── 03_clientes_normales.sql
+│   │       └── 04_operaciones_sospechosas.sql
+│   │
+│   └── solution/                           # Terraform — infraestructura de la solución
+│       ├── main.tf
+│       ├── variables.tf
+│       ├── outputs.tf
+│       ├── rds.tf                          # RDS PostgreSQL: alertas, legislacion, contexto_mercado
+│       ├── lambda.tf                       # Todas las funciones Lambda
+│       ├── eventbridge.tf                  # Cron nocturno — dispara el orchestrator
+│       ├── api_gateway.tf                  # Expone agente conversacional al frontend
+│       ├── bedrock.tf                      # IAM roles y permisos por agente
+│       ├── sns.tf                          # Topics: alerta-generada, alerta-vencida
+│       ├── s3.tf                           # Reportes ROU, evidencias, zips de Lambda
+│       ├── cognito.tf                      # Auth: OPLE, analistas, admin
+│       ├── cloudfront.tf                   # CDN Flutter Web
+│       └── ses.tf                          # Envío ROU a UIF
+│
+├── agents/
+│   ├── orchestrator/                       # Lambda — dispara filtros e invoca agentes con candidatos
+│   │   ├── handler.py
+│   │   └── requirements.txt
+│   │
+│   ├── batch/                              # Una Lambda por agente especializado
+│   │   ├── structuring/
+│   │   │   ├── handler.py
+│   │   │   ├── filter.sql
+│   │   │   └── requirements.txt
+│   │   ├── wash_trading/
+│   │   │   ├── handler.py
+│   │   │   ├── filter.sql
+│   │   │   └── requirements.txt
+│   │   ├── dormant/
+│   │   │   ├── handler.py
+│   │   │   ├── filter.sql
+│   │   │   └── requirements.txt
+│   │   ├── concentration/
+│   │   │   ├── handler.py
+│   │   │   ├── filter.sql
+│   │   │   └── requirements.txt
+│   │   └── spoofing/
+│   │       ├── handler.py
+│   │       ├── filter.sql
+│   │       └── requirements.txt
+│   │
+│   ├── subagents/
+│   │   └── news/                           # Lambda — True/False noticia que justifique movimiento
+│   │       ├── handler.py
+│   │       └── requirements.txt
+│   │
+│   ├── conversational/                     # Lambda continua — agente del OPLE bajo demanda
+│   │   ├── handler.py
+│   │   └── tools/
+│   │       ├── consultar_legislacion.py
+│   │       ├── buscar_operaciones.py
+│   │       ├── buscar_contexto_mercado.py
+│   │       └── generar_rou.py
+│   │
+│   └── shared/                             # Lambda Layer — código compartido entre todas las Lambdas
+│       ├── db.py
+│       ├── bedrock_client.py
+│       ├── models.py
+│       ├── scoring.py
+│       └── adapters/
+│           ├── base_adapter.py
+│           └── simulator_adapter.py
+│
+├── frontend/                               # Flutter Web
+│   ├── lib/
+│   │   ├── main.dart
+│   │   ├── screens/
+│   │   │   ├── dashboard_screen.dart
+│   │   │   ├── alertas_screen.dart
+│   │   │   ├── detalle_alerta_screen.dart
+│   │   │   ├── chat_ople_screen.dart
+│   │   │   └── config_screen.dart
+│   │   ├── widgets/
+│   │   └── services/
+│   │       ├── api_service.dart
+│   │       └── auth_service.dart
+│   ├── pubspec.yaml
+│   └── README.md
+│
+├── docs/
+│   └── ...
+│
+└── README.md
+```
+
+**Decisiones de infraestructura:**
+
+| Componente | Tecnología | Justificación |
+|------------|------------|---------------|
+| Base de datos | RDS PostgreSQL | Tanto el simulador como la solución usan RDS — sin bases de datos en EC2 |
+| Cómputo | Lambda (todas las funciones) | Sin EC2 — incluyendo el agente conversacional que usa el nuevo tipo de Lambda continua |
+| Cron nocturno | EventBridge | Dispara el orchestrator al cierre de jornada |
+| API al frontend | API Gateway | Expone el agente conversacional — reemplaza FastAPI en EC2 |
+| Código compartido | Lambda Layer | `shared/` se despliega como Layer y todas las Lambdas lo consumen |
+
+<!-- ESTRUCTURA_PROYECTO_END -->

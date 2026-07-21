@@ -1,0 +1,98 @@
+# =============================================================================
+# Python — agentes y Lambda
+# =============================================================================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+.venv/
+venv/
+env/
+ENV/
+.env
+.env.*
+!.env.example
+
+# =============================================================================
+# Terraform
+# =============================================================================
+**/.terraform/
+**/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+*.tfvars
+!*.tfvars.example
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# =============================================================================
+# Flutter / Dart
+# =============================================================================
+frontend/.dart_tool/
+frontend/.flutter-plugins
+frontend/.flutter-plugins-dependencies
+frontend/.packages
+frontend/build/
+frontend/pubspec.lock
+frontend/.idea/
+frontend/*.iml
+frontend/android/
+frontend/ios/
+frontend/linux/
+frontend/macos/
+frontend/windows/
+
+# =============================================================================
+# Lambda — zips de despliegue
+# =============================================================================
+*.zip
+agents/**/package/
+agents/**/layer/
+
+# =============================================================================
+# Secretos y credenciales
+# =============================================================================
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+credentials
+.aws/
+
+# =============================================================================
+# IDEs
+# =============================================================================
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# =============================================================================
+# Logs y temporales
+# =============================================================================
+*.log
+*.tmp
+*.bak
+logs/
+tmp/
