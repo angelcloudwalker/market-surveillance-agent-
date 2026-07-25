@@ -695,6 +695,155 @@ class AdaptadorClienteB:
 2. Configuración de umbrales según la regulación aplicable (días)
 3. El agente opera de forma idéntica para todos los clientes
 
+**Separación de esquemas en RDS — brokerage y surveillance**
+
+El sistema opera con dos esquemas dentro del mismo RDS PostgreSQL. Esta separación es una decisión de diseño con implicaciones de seguridad, operación y portabilidad:
+
+| Esquema | Contenido | Acceso del agente |
+|---------|-----------|-------------------|
+| `brokerage` | Clientes, cuentas, operaciones, órdenes, instrumentos — datos de la casa de bolsa | Solo lectura |
+| `surveillance` | Alertas, indicios, hallazgos, legislación, contexto de mercado, decisiones del OPLE, bitácora | Lectura y escritura |
+
+```
+Agente Lambda
+  ├── Lee de   → brokerage.operaciones   (datos del cliente — nunca se modifican)
+  └── Escribe en → surveillance.alertas  (resultados propios del sistema)
+```
+
+Los permisos IAM reflejan esta separación — cada Lambda tiene un rol con acceso de solo lectura sobre `brokerage` y lectura/escritura sobre `surveillance`. Un agente no puede modificar los datos de origen bajo ninguna circunstancia.
+
+**Conexión con base de datos on-premise**
+
+En producción, el esquema `brokerage` no necesariamente vive en RDS — puede ser la base de datos real de la institución, que en la mayoría de los casos es on-premise. El agente puede leer de una fuente y escribir en otra sin modificar su lógica interna. Las opciones de conectividad son:
+
+| Opción | Cuándo usarla | Cómo funciona |
+|--------|--------------|---------------|
+| AWS Site-to-Site VPN | Institución con conectividad a internet y tolerancia a latencia variable | Túnel cifrado entre la red on-premise y la VPC en AWS. El agente resuelve el host on-premise como si estuviera en la misma red |
+| AWS Direct Connect | Institución financiera con contrato de carrier, requiere baja latencia y estabilidad | Conexión física dedicada — más estable y predecible que VPN |
+| AWS Database Migration Service (DMS) | Institución que no quiere abrir conectividad directa desde AWS hacia su red | DMS replica los datos on-premise al RDS `brokerage` en tiempo casi real. El agente solo ve RDS, nunca toca el on-premise directamente |
+
+En los tres casos el flujo del agente es idéntico:
+
+```
+BD on-premise (brokerage real)
+        ↓  VPN / Direct Connect / DMS
+RDS brokerage (lectura) ──→ Agente Lambda ──→ RDS surveillance (escritura)
+```
+
+El adaptador multi-cliente es el punto donde se absorbe la diferencia de esquema — no importa si `brokerage` es RDS replicado desde on-premise o conexión directa vía VPN, el agente siempre opera sobre el modelo canónico. La conectividad es transparente para la lógica de detección.
+
+---
+
+**ETL nocturno — cómo se mueve la información de brokerage a surveillance**
+
+La casa de bolsa opera en horario hábil (8:30–15:30 BMV). Durante ese horario la base transaccional está bajo presión máxima — cualquier consulta externa es un riesgo de indisponibilidad. El sistema de vigilancia **nunca toca `brokerage` en horario hábil**.
+
+Todo lo que el sistema necesita del origen se copia en la noche. A partir de ese momento, agentes y analistas operan exclusivamente sobre `surveillance`.
+
+```
+16:00 CST — EventBridge dispara Lambda ETL
+        ↓
+Lambda lee brokerage (jornada cerrada, sin presión)
+        ↓
+Lambda escribe en surveillance.espejo_*
+        ↓
+Agentes batch analizan sobre surveillance (brokerage intocable)
+        ↓
+Agente conversacional consulta solo surveillance
+```
+
+**Qué se copia — espejo completo de brokerage**
+
+`surveillance` mantiene un espejo completo de todas las tablas de `brokerage`. No se filtra ni se resume — se copia todo para que el analista y el agente conversacional tengan el mismo contexto que si consultaran el origen directamente.
+
+| Tabla espejo en surveillance | Origen en brokerage | Estrategia de copia |
+|------------------------------|--------------------|-----------------------|
+| `espejo_operadores` | `operadores` | UPSERT completo |
+| `espejo_clientes` | `clientes` | UPSERT completo |
+| `espejo_cuentas` | `cuentas` | UPSERT completo |
+| `espejo_instrumentos` | `instrumentos` | UPSERT completo |
+| `espejo_operaciones` | `operaciones` | INSERT jornada cerrada |
+| `espejo_ordenes` | `ordenes` | INSERT jornada cerrada |
+| `espejo_posiciones` | `posiciones` | INSERT jornada cerrada |
+| `espejo_saldos_diarios` | `saldos_diarios` | INSERT jornada cerrada |
+
+**Dos fases de operación**
+
+*Fase 1 — Carga inicial completa (primera vez que se instala el sistema):*
+
+Antes de que el sistema entre en operación normal, el Lambda ETL hace una copia completa de todas las tablas de `brokerage` — histórico incluido. Esto garantiza que los agentes tengan contexto suficiente desde el primer día: el agente de dormant necesita historial de meses, el de structuring necesita ventana de 30 días.
+
+```sql
+-- Carga inicial — todo el histórico disponible
+INSERT INTO surveillance.espejo_operaciones
+    SELECT * FROM brokerage.operaciones
+ON CONFLICT (id) DO NOTHING;
+```
+
+Esta carga se ejecuta una sola vez, fuera de horario hábil, y puede tomar varios minutos dependiendo del volumen histórico. No interfiere con la operación porque `brokerage` ya cerró.
+
+*Fase 2 — Operación normal (cada noche):*
+
+Una vez que el espejo existe, el Lambda solo copia las deltas — lo nuevo o modificado desde la última ejecución.
+
+Para tablas transaccionales (operaciones, órdenes, posiciones, saldos) la delta es la jornada que acaba de cerrar:
+
+```sql
+-- Solo la jornada que cerró hoy
+INSERT INTO surveillance.espejo_operaciones
+    SELECT * FROM brokerage.operaciones
+    WHERE fecha = CURRENT_DATE - 1
+ON CONFLICT (id) DO NOTHING;
+```
+
+Para tablas de catálogo (clientes, cuentas, instrumentos, operadores) la delta son los registros nuevos o modificados. Como estas tablas son pequeñas, el UPSERT completo nocturno es suficiente — copia todo y deja que el `ON CONFLICT` resuelva qué actualizar y qué ignorar:
+
+```sql
+-- Catálogos: UPSERT completo cada noche — tablas pequeñas, costo insignificante
+INSERT INTO surveillance.espejo_clientes
+    SELECT * FROM brokerage.clientes
+ON CONFLICT (id) DO UPDATE SET
+    nivel_riesgo = EXCLUDED.nivel_riesgo,
+    estado       = EXCLUDED.estado,
+    nombre       = EXCLUDED.nombre;
+```
+
+**IDs originales preservados**
+
+Las tablas espejo conservan el `id` original de `brokerage` — no se genera un nuevo SERIAL. Esto garantiza que el `ON CONFLICT (id)` funcione correctamente y que las foreign keys entre tablas espejo sean consistentes.
+
+**Modo de operación configurable por cliente**
+
+Si la institución lleva control de modificaciones en sus tablas de catálogo (`updated_at`), el Lambda puede operar en modo incremental — más eficiente para catálogos grandes:
+
+| Modo | Cuándo usarlo | Cómo funciona |
+|------|--------------|---------------|
+| UPSERT completo (default) | Sin `updated_at` en origen — no requiere cambios en la BD del cliente | Lambda copia todos los catálogos cada noche |
+| UPSERT incremental | Origen tiene `updated_at` — institución con control de modificaciones | Lambda filtra `WHERE updated_at >= jornada_anterior` — solo lo que cambió |
+
+Es un parámetro de configuración por cliente, no un rediseño. El núcleo del Lambda es el mismo en ambos modos.
+
+**Principios de acceso — no negociables**
+
+El diseño de acceso a `brokerage` tiene tres reglas que se implementan a nivel de infraestructura, no de convención:
+
+| Regla | Implementación |
+|-------|----------------|
+| Solo lectura sobre `brokerage` | Usuario de BD con `GRANT SELECT` únicamente — sin `INSERT`, `UPDATE`, `DELETE`. IAM role del Lambda ETL sin permisos de escritura sobre el RDS origen |
+| Solo horario nocturno | EventBridge dispara el Lambda ETL a las 16:00 CST. Fuera de esa ventana no existe ningún proceso con acceso a `brokerage` |
+| Agentes y conversacional sin acceso a `brokerage` | Las credenciales de los agentes de detección y del agente conversacional apuntan exclusivamente a `surveillance` — físicamente no pueden conectarse a `brokerage` |
+
+```
+brokerage                            surveillance
+─────────────────────                ──────────────────────
+Solo lectura                         Lectura y escritura
+Solo 16:00 CST (Lambda ETL)  ──►     Agentes batch
+Sin acceso de agentes                Agente conversacional
+Sin acceso del OPLE                  OPLE (vía Flutter)
+```
+
+Esta separación garantiza que el sistema de vigilancia no puede ser causa de indisponibilidad de la plataforma transaccional bajo ninguna circunstancia — ni por un bug, ni por una consulta mal escrita, ni por un volumen inesperado de requests.
+
 **Modelo de negocio:**
 
 - Núcleo genérico (agente + reglas + dashboard) → producto estándar con licencia recurrente
@@ -1400,6 +1549,62 @@ Toda la complejidad del sistema reside en la calidad del diagnóstico — la pre
 
 ---
 
+---
+
+## Alcance del sistema — renta variable únicamente
+
+Este sistema está diseñado y calibrado exclusivamente para **renta variable** — acciones, ETFs y FIBRAs que cotizan en BMV y BIVA. Los cinco patrones del MVP y todos los patrones del roadmap asumen este contexto: un instrumento con precio de mercado, volumen diario observable y libro de órdenes abierto.
+
+**Por qué no se incluyen derivados**
+
+La exclusión no es técnica — es conceptual. La manipulación en derivados raramente ocurre en el derivado mismo. Ocurre en el subyacente:
+
+```
+Trader acumula calls sobre AMXL
+        ↓
+Manipula el precio de la acción AMXL justo antes del vencimiento
+        ↓
+Su opción vence in the money
+        ↓
+El beneficio está en el derivado — el delito está en la acción
+```
+
+Detectar eso requiere correlacionar simultáneamente la posición en el derivado con las operaciones en el subyacente — dos mercados distintos, dos estructuras de datos distintas, un análisis cruzado que este sistema no realiza.
+
+**Los tres tipos de derivados y su riesgo de manipulación:**
+
+| Instrumento | Mecanismo | Manipulación típica | Dónde ocurre el delito |
+|---|---|---|---|
+| Opciones | Derecho a comprar/vender a precio fijo en fecha futura | *Marking the close* — manipular el subyacente para que la opción venza in the money | En el subyacente (acción) |
+| Futuros | Obligación de comprar/vender a precio fijo en fecha futura | *Banging the close* — mover el precio del subyacente en los últimos minutos para beneficiar el settlement | En el subyacente (acción o índice) |
+| Swaps | Intercambio de flujos entre dos partes (OTC) | Colusión entre contrapartes, manipulación de tasa de referencia (caso LIBOR) | En la tasa de referencia o entre las partes |
+
+**Los derivados también son vehículo de lavado de dinero**
+
+Más allá de la manipulación de mercado, los derivados son uno de los instrumentos más sofisticados para lavar dinero:
+
+- **Wash trading con opciones** — dos cómplices acuerdan precio de prima fuera del mercado. Uno pierde intencionalmente (absorbe el dinero sucio), el otro gana (extrae dinero limpio como ganancia de capital documentada)
+- **Posiciones simétricas en futuros** — abrir largo y corto simultáneamente desde dos entidades distintas. Una gana, la otra pierde exactamente lo mismo. La perdedora absorbe el dinero sucio como pérdida de trading; la ganadora extrae dinero limpio
+- **Swaps OTC** — liquidaciones entre partes relacionadas a tasas convenidas, no de mercado. El diferencial es el mecanismo de transferencia
+
+En todos los casos la señal no está en una operación individual — está en **quién controla ambas puntas**. Eso es un problema de detección de redes, no de análisis de patrones de trading.
+
+**Lo que requeriría un sistema que cubra derivados:**
+
+1. Ingestar el mercado de derivados de MexDer (futuros y opciones sobre el IPC y emisoras individuales)
+2. Modelar la relación subyacente-derivado para cada posición abierta
+3. Detectar correlaciones temporales entre operaciones en el subyacente y posiciones en derivados
+4. Construir un grafo de relaciones entre entidades para identificar quién controla ambas puntas
+5. Definir nuevos patrones de detección específicos para cada tipo de instrumento derivado
+
+Eso es un proyecto independiente con su propio scope, su propio modelo de datos y sus propios agentes especializados. No es una extensión de este sistema — es un sistema distinto que comparte la misma arquitectura base.
+
+**En una evaluación o auditoría del sistema:**
+
+Si se pregunta si el sistema puede evaluar derivados, la respuesta correcta es no — y la razón no es una limitación técnica sino una decisión de diseño consciente. Extender el sistema a derivados sin modelar la relación con el subyacente produciría falsos negativos sistemáticos: el patrón estaría ocurriendo y el sistema no lo vería porque está mirando el instrumento equivocado.
+
+---
+
 <!-- ESTRUCTURA_PROYECTO_START -->
 ## Estructura del proyecto
 
@@ -1518,3 +1723,32 @@ market-surveillance-agent/
 | Código compartido | Lambda Layer | `shared/` se despliega como Layer y todas las Lambdas lo consumen |
 
 <!-- ESTRUCTURA_PROYECTO_END -->
+
+---
+
+## Restaurar la base de datos desde cero
+
+```bash
+# Desde: market-surveillance-agent/
+
+# 1. Drop y recrear
+PGPASSWORD=postgres psql -U postgres -h localhost -c "DROP DATABASE IF EXISTS market_surveillance;"
+PGPASSWORD=postgres psql -U postgres -h localhost -c "CREATE DATABASE market_surveillance;"
+
+# 2. Schemas — broker (simulador) y surveillance (solución) + parámetros
+PGPASSWORD=postgres psql -U postgres -h localhost -d market_surveillance -f infra/simulator/seed/01_schema.sql
+PGPASSWORD=postgres psql -U postgres -h localhost -d market_surveillance -f infra/solution/seed/01_schema.sql
+PGPASSWORD=postgres psql -U postgres -h localhost -d market_surveillance -f infra/knowledge/02_parametros.sql
+
+# 3. Datos broker
+PGPASSWORD=postgres psql -U postgres -h localhost -d market_surveillance -f infra/simulator/seed/02_instrumentos.sql
+PGPASSWORD=postgres psql -U postgres -h localhost -d market_surveillance -f infra/simulator/seed/03_clientes_normales.sql
+PGPASSWORD=postgres psql -U postgres -h localhost -d market_surveillance -f infra/simulator/seed/04_patrones_sospechosos.sql
+
+# 4. Seeds adicionales
+PGPASSWORD=postgres psql -U postgres -h localhost -d market_surveillance -f infra/simulator/seed/06_structuring_casos2_3.sql
+PGPASSWORD=postgres psql -U postgres -h localhost -d market_surveillance -f infra/simulator/seed/07_wash_trading.sql
+
+# 5. ETL — copia todo broker → espejo
+PGPASSWORD=postgres psql -U postgres -h localhost -d market_surveillance -f infra/simulator/seed/05_etl_inicial.sql
+```

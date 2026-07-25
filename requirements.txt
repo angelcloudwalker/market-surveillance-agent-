@@ -1,0 +1,9 @@
+# Agentes
+strands-agents
+boto3
+
+# Base de datos
+psycopg2-binary
+
+# Procesamiento de documentos
+pdfplumber
