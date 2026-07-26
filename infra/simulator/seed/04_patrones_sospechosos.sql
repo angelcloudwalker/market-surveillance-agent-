@@ -2,7 +2,7 @@
 -- SEED: patrones sospechosos
 -- Un caso de prueba por agente del MVP
 -- Si el agente no lo detecta, el problema está en filter.sql o en el prompt
--- Fecha de referencia: 2025-01-15 (jornada actual)
+-- Fecha de referencia: 2026-07-24 (jornada actual)
 -- =============================================================================
 --
 -- PATRÓN 1 — STRUCTURING       contrato 16 (Grupo Inversor Metropolitano)
@@ -19,7 +19,7 @@
 --
 -- PATRÓN 3 — DORMANT           contrato 18 (Héctor Manuel Villanueva Prado)
 --   Últimas operaciones: septiembre 2020 (~4 años de inactividad)
---   El 2025-01-15 opera $1,200,000 en POCHTECB (valor_id=26)
+--   El 2026-01-15 opera $1,200,000 en POCHTECB (valor_id=26)
 --   Señal: contrato dormido que despierta con volumen 300x su historial
 --
 -- PATRÓN 4 — CONCENTRATION     contrato 15 (Capital Empresarial MX)
@@ -41,19 +41,19 @@ SET search_path = broker;
 -- Grupo Inversor Metropolitano (contrato_id=16, contraparte_id=15)
 -- trader_id=4 (Alejandra Torres Ibáñez)
 -- GISSAA (valor_id=30), precio ~52.40, umbral $50,000
--- 9 transacciones de 940 títulos = $49,256 c/u — todas el 2025-01-15
+-- 9 transacciones de 940 títulos = $49,256 c/u — todas el 2026-01-15
 -- =============================================================================
 
 INSERT INTO transacciones (contrato_id, valor_id, trader_id, sentido, titulos, precio_ejec, importe, fecha_hora, fecha_op) VALUES
-(16, 30, 4, 'compra', 940, 52.400000, 49256.00, '2025-01-15 09:05:00-06', '2025-01-15'),
-(16, 30, 4, 'compra', 940, 52.400000, 49256.00, '2025-01-15 09:32:00-06', '2025-01-15'),
-(16, 30, 4, 'compra', 940, 52.400000, 49256.00, '2025-01-15 10:01:00-06', '2025-01-15'),
-(16, 30, 4, 'compra', 940, 52.400000, 49256.00, '2025-01-15 10:28:00-06', '2025-01-15'),
-(16, 30, 4, 'compra', 940, 52.400000, 49256.00, '2025-01-15 10:55:00-06', '2025-01-15'),
-(16, 30, 4, 'compra', 940, 52.400000, 49256.00, '2025-01-15 11:22:00-06', '2025-01-15'),
-(16, 30, 4, 'compra', 940, 52.400000, 49256.00, '2025-01-15 11:49:00-06', '2025-01-15'),
-(16, 30, 4, 'compra', 940, 52.400000, 49256.00, '2025-01-15 12:30:00-06', '2025-01-15'),
-(16, 30, 4, 'compra', 940, 52.400000, 49256.00, '2025-01-15 13:05:00-06', '2025-01-15');
+(16, 30, 4, 'compra', 940, 52.400000, 49256.00, '2026-01-15 09:05:00-06', '2026-01-15'),
+(16, 30, 4, 'compra', 940, 52.400000, 49256.00, '2026-01-15 09:32:00-06', '2026-01-15'),
+(16, 30, 4, 'compra', 940, 52.400000, 49256.00, '2026-01-15 10:01:00-06', '2026-01-15'),
+(16, 30, 4, 'compra', 940, 52.400000, 49256.00, '2026-01-15 10:28:00-06', '2026-01-15'),
+(16, 30, 4, 'compra', 940, 52.400000, 49256.00, '2026-01-15 10:55:00-06', '2026-01-15'),
+(16, 30, 4, 'compra', 940, 52.400000, 49256.00, '2026-01-15 11:22:00-06', '2026-01-15'),
+(16, 30, 4, 'compra', 940, 52.400000, 49256.00, '2026-01-15 11:49:00-06', '2026-01-15'),
+(16, 30, 4, 'compra', 940, 52.400000, 49256.00, '2026-01-15 12:30:00-06', '2026-01-15'),
+(16, 30, 4, 'compra', 940, 52.400000, 49256.00, '2026-01-15 13:05:00-06', '2026-01-15');
 -- Total acumulado: 8,460 títulos / $443,304 — fragmentado en 9 tickets de $49,256
 
 -- =============================================================================
@@ -65,8 +65,8 @@ INSERT INTO transacciones (contrato_id, valor_id, trader_id, sentido, titulos, p
 -- =============================================================================
 
 INSERT INTO transacciones (contrato_id, valor_id, trader_id, sentido, titulos, precio_ejec, importe, fecha_hora, fecha_op) VALUES
-(11, 27, 2, 'venta',  10000, 18.900000, 189000.00, '2025-01-15 10:15:00-06', '2025-01-15'),
-(12, 27, 2, 'compra', 10000, 18.900000, 189000.00, '2025-01-15 10:16:00-06', '2025-01-15');
+(11, 27, 2, 'venta',  10000, 18.900000, 189000.00, '2026-01-15 10:15:00-06', '2026-01-15'),
+(12, 27, 2, 'compra', 10000, 18.900000, 189000.00, '2026-01-15 10:16:00-06', '2026-01-15');
 -- Misma contraparte, mismo trader, mismo precio, 60 segundos de diferencia
 -- 10,000 títulos = 26.3% del volumen diario de VITROA
 
@@ -78,10 +78,10 @@ INSERT INTO transacciones (contrato_id, valor_id, trader_id, sentido, titulos, p
 -- Hoy: compra masiva de POCHTECB (valor_id=26) por $1,200,000 (~307x el promedio)
 -- =============================================================================
 
-UPDATE contratos SET ultimo_movimiento = '2025-01-15' WHERE contrato_id = 18;
+UPDATE contratos SET ultimo_movimiento = '2026-01-15' WHERE contrato_id = 18;
 
 INSERT INTO transacciones (contrato_id, valor_id, trader_id, sentido, titulos, precio_ejec, importe, fecha_hora, fecha_op) VALUES
-(18, 26, 1, 'compra', 96000, 12.500000, 1200000.00, '2025-01-15 09:45:00-06', '2025-01-15');
+(18, 26, 1, 'compra', 96000, 12.500000, 1200000.00, '2026-01-15 09:45:00-06', '2026-01-15');
 -- 96,000 títulos = 228% del volumen diario de POCHTECB (vol_promedio=42,000)
 -- Importe 35x mayor que cualquier transacción previa de este contrato
 
@@ -94,7 +94,7 @@ INSERT INTO transacciones (contrato_id, valor_id, trader_id, sentido, titulos, p
 -- =============================================================================
 
 INSERT INTO transacciones (contrato_id, valor_id, trader_id, sentido, titulos, precio_ejec, importe, fecha_hora, fecha_op) VALUES
-(15, 26, 3, 'compra', 38000, 12.500000, 475000.00, '2025-01-15 11:00:00-06', '2025-01-15');
+(15, 26, 3, 'compra', 38000, 12.500000, 475000.00, '2026-01-15 11:00:00-06', '2026-01-15');
 -- 38,000 / 42,000 = 90.5% del mercado diario de POCHTECB en una sola transacción
 
 -- =============================================================================
@@ -107,21 +107,21 @@ INSERT INTO transacciones (contrato_id, valor_id, trader_id, sentido, titulos, p
 
 -- Transacción real: compra ejecutada después de cancelar las instrucciones falsas
 INSERT INTO transacciones (contrato_id, valor_id, trader_id, sentido, titulos, precio_ejec, importe, fecha_hora, fecha_op) VALUES
-(5, 30, 2, 'compra', 15000, 51.800000, 777000.00, '2025-01-15 13:45:35-06', '2025-01-15');
+(5, 30, 2, 'compra', 15000, 51.800000, 777000.00, '2026-01-15 13:45:35-06', '2026-01-15');
 -- Compra a 51.80 — 0.60 pesos por debajo del precio de referencia (52.40)
 -- Beneficio de la manipulación: $9,000 en una sola transacción
 
 -- Instrucciones de venta falsas — canceladas en 8 a 25 segundos
 INSERT INTO instrucciones (contrato_id, valor_id, trader_id, folio_transaccion, sentido, titulos, precio_limite, hora_envio, hora_cancelacion, estatus, fecha_op) VALUES
-(5, 30, 2, NULL, 'venta', 25000, 52.200000, '2025-01-15 13:44:00-06', '2025-01-15 13:44:08-06', 'cancelada', '2025-01-15'),
-(5, 30, 2, NULL, 'venta', 25000, 52.100000, '2025-01-15 13:44:10-06', '2025-01-15 13:44:23-06', 'cancelada', '2025-01-15'),
-(5, 30, 2, NULL, 'venta', 25000, 52.000000, '2025-01-15 13:44:25-06', '2025-01-15 13:44:40-06', 'cancelada', '2025-01-15'),
-(5, 30, 2, NULL, 'venta', 25000, 51.900000, '2025-01-15 13:44:42-06', '2025-01-15 13:45:05-06', 'cancelada', '2025-01-15'),
-(5, 30, 2, NULL, 'venta', 25000, 51.800000, '2025-01-15 13:45:07-06', '2025-01-15 13:45:28-06', 'cancelada', '2025-01-15');
+(5, 30, 2, NULL, 'venta', 25000, 52.200000, '2026-01-15 13:44:00-06', '2026-01-15 13:44:08-06', 'cancelada', '2026-01-15'),
+(5, 30, 2, NULL, 'venta', 25000, 52.100000, '2026-01-15 13:44:10-06', '2026-01-15 13:44:23-06', 'cancelada', '2026-01-15'),
+(5, 30, 2, NULL, 'venta', 25000, 52.000000, '2026-01-15 13:44:25-06', '2026-01-15 13:44:40-06', 'cancelada', '2026-01-15'),
+(5, 30, 2, NULL, 'venta', 25000, 51.900000, '2026-01-15 13:44:42-06', '2026-01-15 13:45:05-06', 'cancelada', '2026-01-15'),
+(5, 30, 2, NULL, 'venta', 25000, 51.800000, '2026-01-15 13:45:07-06', '2026-01-15 13:45:28-06', 'cancelada', '2026-01-15');
 -- 5 instrucciones × 25,000 títulos = 125,000 títulos de presión artificial (446% del vol diario)
 -- Canceladas entre 8 y 23 segundos
 -- Precio bajando escalonadamente: 52.20 → 51.80
 
 -- Instrucción ejecutada vinculada a la compra real
 INSERT INTO instrucciones (contrato_id, valor_id, trader_id, folio_transaccion, sentido, titulos, precio_limite, hora_envio, hora_cancelacion, estatus, fecha_op) VALUES
-(5, 30, 2, 66, 'compra', 15000, 51.800000, '2025-01-15 13:45:30-06', NULL, 'ejecutada', '2025-01-15');
+(5, 30, 2, 66, 'compra', 15000, 51.800000, '2026-01-15 13:45:30-06', NULL, 'ejecutada', '2026-01-15');

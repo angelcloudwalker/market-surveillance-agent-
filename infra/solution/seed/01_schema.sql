@@ -268,6 +268,45 @@ CREATE INDEX idx_ctx_bm25
 CREATE INDEX idx_ctx_ticker_fecha       ON contexto_mercado (ticker, fecha);
 
 -- =============================================================================
+-- NOTAS DE CLIENTE
+-- Aportaciones internas de cualquier área sobre un cliente específico
+-- Contexto institucional que el agente usa para enriquecer el análisis
+-- Una nota puede justificar o agravar una alerta — el OPLE decide
+-- =============================================================================
+CREATE TABLE notas_cliente (
+    id          BIGSERIAL    PRIMARY KEY,
+    cliente_id  INT          NOT NULL REFERENCES espejo_clientes(id),
+    autor       VARCHAR(100) NOT NULL,
+    area        VARCHAR(20)  NOT NULL
+                    CHECK (area IN ('compliance', 'comercial', 'riesgos', 'operaciones', 'direccion')),
+    contenido   TEXT         NOT NULL,
+    creada_en   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_notas_cliente ON notas_cliente (cliente_id, creada_en DESC);
+
+-- =============================================================================
+-- ANÁLISIS DE ALERTAS
+-- Registro completo de cada sesión de análisis del OPLE con el agente
+-- historial_raw : conversación completa turno a turno — evidencia regulatoria
+-- justificacion : narrativa final del OPLE — máx 500 caracteres
+-- =============================================================================
+CREATE TABLE analisis_alerta (
+    id              BIGSERIAL    PRIMARY KEY,
+    alerta_id       BIGINT       NOT NULL REFERENCES alertas(id),
+    ople_id         VARCHAR(100) NOT NULL,
+    inicio          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    fin             TIMESTAMPTZ,
+    decision        VARCHAR(20)
+                        CHECK (decision IN ('confirmada', 'descartada', 'escalada', 'pendiente')),
+    justificacion   VARCHAR(500),
+    historial_raw   JSONB        NOT NULL DEFAULT '[]'
+);
+
+CREATE INDEX idx_analisis_alerta    ON analisis_alerta (alerta_id);
+CREATE INDEX idx_analisis_ople      ON analisis_alerta (ople_id, inicio DESC);
+
+-- =============================================================================
 -- BITÁCORA ETL
 -- Registro de cada ejecución del Lambda ETL nocturno
 -- Auditoría de qué se copió, cuándo y cuántos registros

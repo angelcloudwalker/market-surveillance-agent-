@@ -51,25 +51,59 @@ Este sistema existe para cerrar esa brecha.
 
 **Patrones que abarca el sistema:**
 
-El mercado de capitales concentra una variedad amplia de patrones de manipulación y lavado documentados por el GAFI y los reguladores internacionales. El sistema está diseñado para detectarlos todos en su madurez. El MVP cubre los cinco patrones de mayor impacto y menor complejidad de implementación con datos sintéticos:
+El mercado de capitales concentra una variedad amplia de patrones de manipulación y lavado documentados por el GAFI y los reguladores internacionales. El sistema está diseñado para detectarlos todos en su madurez. La tabla siguiente clasifica cada patrón según los insumos que requiere — desde los que ya corren hoy hasta los que dependen de fuentes externas al alcance de cualquier casa de bolsa.
 
-| # | Patrón | MVP | Alcance posterior |
-|---|--------|-----|------------------|
-| 1 | Structuring | ✅ | |
-| 2 | Wash Trading | ✅ | |
-| 3 | Cuentas dormidas que despiertan | ✅ | |
-| 4 | Concentración inusual | ✅ | |
-| 5 | Spoofing — análisis estático de órdenes canceladas | ✅ | |
-| 6 | Pump & Dump | | ⏳ Iteración 2 |
-| 7 | Operaciones sin lógica económica | | ⏳ Iteración 2 |
-| 8 | Churning | | ⏳ Iteración 2 |
-| 9 | Colusión entre cuentas | | ⏳ Iteración 3 |
-| 10 | Spoofing en tiempo real | | ⏳ Iteración 3 |
-| 11 | Layering | | ⏳ Iteración 3 |
-| 12 | Marking the Close | | ⏳ Iteración 3 |
-| 13 | Front Running | | ⏳ Iteración 4 |
-| 14 | Insider Trading | | ⏳ Iteración 4 |
-| 15 | Parking | | ⏳ Iteración 4 |
+| # | Patrón | Insumo principal | Disponibilidad |
+|---|--------|-----------------|----------------|
+| 1 | Structuring | Transacciones, importes, fechas | ✅ Implementado |
+| 2 | Wash Trading | Transacciones, cuentas, precios | ✅ Implementado |
+| 3 | Cuentas dormidas que despiertan | Tenencias, historial de actividad | ✅ Implementado |
+| 4 | Concentración inusual | Tenencias, volumen promedio | ✅ Implementado |
+| 5 | Spoofing — análisis estático de órdenes canceladas | Instrucciones canceladas, transacciones | ✅ Implementado |
+| 6 | Layering | Instrucciones multicapa canceladas | 🟡 Schema actual |
+| 7 | Marking the Close | Timestamp final de jornada | 🟡 Schema actual |
+| 8 | Churning | Frecuencia de operaciones misma cuenta | 🟡 Schema actual |
+| 9 | Painting the Tape | Operaciones circulares entre cuentas | 🟡 Schema actual |
+| 10 | Front Running | Calendario BMV + cuentas propias del operador | 🟠 Casa de bolsa |
+| 11 | Smurfing | RFC/KYC vinculado entre personas físicas | 🟠 Casa de bolsa |
+| 12 | Cuentas mula | Patrón entra/sale sin inversión real | 🟠 Casa de bolsa |
+| 13 | Colusión entre operadores | Coordinación entre mesas distintas | 🟠 Casa de bolsa |
+| 14 | Round Tripping | Transferencias internacionales SWIFT | 🔴 Inalcanzable |
+| 15 | Insider Trading profundo | Comunicaciones internas, correos, llamadas | 🔴 Inalcanzable |
+| 16 | Fragmentación de transferencias | SPEI internacional + corresponsales | 🔴 Inalcanzable |
+| 17 | Financiamiento al terrorismo | Listas OFAC/ONU en tiempo real | 🔴 Inalcanzable |
+
+**Leyenda de disponibilidad:**
+
+| Ícono | Significado |
+|-------|-------------|
+| ✅ Implementado | Detector corriendo hoy con datos sintéticos |
+| 🟡 Schema actual | Detectable sin agregar una sola tabla — solo requiere nuevo `filter.sql` + `handler.py` |
+| 🟠 Casa de bolsa | Viable con acceso a sistemas reales de la institución (KYC, calendario BMV, cuentas propias) |
+| 🔴 Inalcanzable | Requiere fuentes externas al alcance de una casa de bolsa: SWIFT, OFAC, comunicaciones internas |
+
+**Patrones en derivados:**
+
+Los derivados — opciones, futuros y swaps — introducen una dimensión adicional de complejidad: el patrón raramente ocurre en el derivado mismo, sino en la relación entre el derivado y su subyacente. Detectarlos requiere cruzar dos instrumentos simultáneamente, lo que implica un schema extendido y detectores rediseñados para razonar sobre ambos lados de la posición.
+
+La tabla siguiente asume que el schema de derivados ya existe — contratos de opciones y futuros con su relación explícita al subyacente, posiciones abiertas por cuenta y precios de settlement diarios.
+
+| # | Patrón | Insumo principal | Disponibilidad |
+|---|--------|-----------------|----------------|
+| 1 | Acumulación inusual previa a vencimiento | Posición grande en subyacente antes de vencimiento de opción — señal indirecta sin schema de derivados | 🟡 Schema actual |
+| 2 | Marking the Close en subyacente | Operaciones en últimos 15 min que mueven precio de cierre — el derivado se beneficia pero no es visible | 🟡 Schema actual |
+| 3 | Banging the Close | Posiciones en futuros + transacciones en subyacente en últimos 15 min de jornada | 🟠 Casa de bolsa |
+| 4 | Marking the Close coordinado | Opciones próximas a vencimiento + operaciones en subyacente mismo día — cruce explícito | 🟠 Casa de bolsa |
+| 5 | Wash trading con opciones | Dos cuentas intercambian primas fuera de mercado — pérdida intencional en una para transferir valor | 🟠 Casa de bolsa |
+| 6 | Posiciones simétricas en futuros | Cuenta A larga + Cuenta B corta mismo nocional — una absorbe dinero sucio, la otra extrae ganancia limpia | 🟠 Casa de bolsa |
+| 7 | Acumulación de calls antes de hecho relevante | Posición en opciones call crece días antes de anuncio corporativo — señal de información privilegiada | 🟠 Casa de bolsa |
+| 8 | Churning en derivados | Operador rota posiciones en opciones excesivamente para generar comisiones artificiales | 🟠 Casa de bolsa |
+| 9 | Insider trading con opciones | Requiere saber quién tenía acceso a información privilegiada — interno del emisor, fuera del alcance | 🔴 Inalcanzable |
+| 10 | Spoofing coordinado cross-market | Una punta en derivados MexDer, otra en subyacente BMV — requiere visibilidad consolidada del regulador | 🔴 Inalcanzable |
+| 11 | Swaps OTC manipulados | Contratos bilaterales que no pasan por ningún book — solo el regulador ve ambas puntas | 🔴 Inalcanzable |
+| 12 | Posiciones simétricas entre instituciones | Cuenta A en casa de bolsa X, Cuenta B en casa de bolsa Y — invisible desde una sola institución | 🔴 Inalcanzable |
+
+La misma leyenda de disponibilidad aplica para esta tabla. El patrón más valioso y alcanzable con recursos de casa de bolsa es el **banging the close** — es el más frecuente en mercados de derivados latinoamericanos y el cruce subyacente ↔ futuro es un JOIN directo una vez que el schema de derivados existe.
 
 ---
 
@@ -1602,6 +1636,137 @@ Eso es un proyecto independiente con su propio scope, su propio modelo de datos 
 **En una evaluación o auditoría del sistema:**
 
 Si se pregunta si el sistema puede evaluar derivados, la respuesta correcta es no — y la razón no es una limitación técnica sino una decisión de diseño consciente. Extender el sistema a derivados sin modelar la relación con el subyacente produciría falsos negativos sistemáticos: el patrón estaría ocurriendo y el sistema no lo vería porque está mirando el instrumento equivocado.
+
+---
+
+## Agente conversacional del OPLE
+
+### Flujo de interacción
+
+El OPLE no escribe comandos ni busca alertas manualmente. Flutter presenta la lista de alertas pendientes y el OPLE selecciona una con un botón. A partir de ese momento el agente ya sabe de qué alerta se trata — no hay ambigüedad.
+
+```
+Flutter muestra lista de alertas pendientes
+        ↓
+OPLE presiona "Analizar" en la alerta seleccionada
+        ↓
+Flutter llama iniciar_analisis(alerta_id, ople_id) → recibe analisis_id
+        ↓
+Flutter llama chat(alerta_id, analisis_id, "¿qué observas?", historial=[])
+        ↓
+Agente carga contexto de la alerta + skill del patrón + responde
+        ↓
+OPLE conversa: "¿qué dice la ley?", "¿hay contexto de mercado?", "genera el ROU"
+        ↓
+OPLE presiona "Cerrar análisis" → Flutter llama cerrar_analisis(analisis_id, decision, justificacion)
+```
+
+Cada alerta tiene su propia sesión. Cuando el OPLE abre una alerta diferente, Flutter manda `historial=[]` — contexto limpio, skill nuevo según el patrón de esa alerta.
+
+### Skills por patrón
+
+Cada patrón tiene un archivo `skills/{patron}.md` que se inyecta al system prompt al inicio de la sesión. El agente llega "entrenado" para ese tipo de alerta específica — sabe qué buscar, qué preguntas hacerse y qué ley aplica — sin que el OPLE lo guíe.
+
+```
+agents/conversational/skills/
+├── structuring.md      → umbral LFPIORPI, fragmentación, desviación estándar
+├── wash_trading.md     → Art. 212 LMV, segundos entre operaciones, volumen
+├── spoofing.md         → órdenes fantasma, tiempo de cancelación, beneficiario
+├── dormant.md          → días inactiva, factor de incremento, debida diligencia
+└── concentration.md    → % del volumen, cuentas participantes, contexto de mercado
+```
+
+Si mañana se agrega un nuevo patrón, basta con crear el `.md` correspondiente — el handler lo carga automáticamente.
+
+### Tools disponibles para el agente
+
+| Tool | Cuándo la usa |
+|------|---------------|
+| `buscar_operaciones` | Al inicio — jala evidencia completa de la alerta |
+| `buscar_notas_cliente` | Al inicio — contexto institucional del cliente |
+| `consultar_legislacion` | Cuando necesita fundamentar legalmente |
+| `buscar_contexto_mercado` | Cuando necesita contexto del mercado ese día |
+| `generar_rou` | Al final — solo con confirmación explícita del OPLE |
+
+`buscar_notas_cliente` es especialmente relevante: si el área comercial dejó una nota documentando una instrucción explícita del cliente, eso puede ser el elemento que lleve al OPLE a descartar la alerta. El agente presenta esa nota como evidencia a favor del cliente, igual que las operaciones son evidencia en contra.
+
+### Hooks y steering
+
+**Hook de auditoría** — observa sin intervenir. Cada tool call y cada mensaje de la conversación se loggea con timestamp, alerta_id y ople_id. En producción va a CloudWatch. Trazabilidad regulatoria completa de qué consultó el agente y cuándo.
+
+**Steering (guardarraíl ROU)** — interviene activamente. Bloquea `generar_rou` hasta que Flutter mande `confirmacion_rou=True`. El agente no puede generar un ROU "por accidente" en medio de una conversación — el OPLE debe presionar un botón de confirmación explícita.
+
+### Estrategia de persistencia — historial completo sin costo de memoria
+
+Dos historiales con propósitos distintos viajan en paralelo:
+
+```
+historial resumido  → lo que el modelo ve en cada turno (~500 tokens)
+historial_raw       → todo lo que ocurrió, guardado en BD turno a turno
+```
+
+**Historial resumido (SummarizingConversationManager):**
+
+Strands resume automáticamente los turnos anteriores cuando el historial crece. El modelo siempre recibe un resumen comprimido de lo que ya se discutió más el turno actual — nunca la conversación completa.
+
+```
+Turno 1-5  → modelo los resume en 2-3 líneas con Haiku
+Turno 6    → modelo recibe: resumen(1-5) + turno 6
+Turno 7    → modelo recibe: resumen(1-6) + turno 7
+```
+
+Costo por turno: ~500-800 tokens vs ~3,000-5,000 tokens con sliding window. El resumen lo genera Haiku — centavos.
+
+**Historial raw (BD):**
+
+El hook de auditoría persiste cada evento directo en la tabla `analisis_alerta.historial_raw` (JSONB) usando `||` para append — sin cargar el array completo en memoria. Cada turno se guarda en el momento en que ocurre, no al final.
+
+```json
+[
+  {"tipo": "mensaje",     "role": "user",      "content": "¿qué observas?",   "ts": "..."},
+  {"tipo": "tool_use",   "tool": "buscar_operaciones", "input": {...},       "ts": "..."},
+  {"tipo": "tool_result","tool": "buscar_operaciones", "ok": true,           "ts": "..."},
+  {"tipo": "mensaje",     "role": "assistant", "content": "Observo 8 fragmentos...", "ts": "..."}
+]
+```
+
+Flutter solo guarda el historial resumido en el estado de la pantalla. El raw vive exclusivamente en BD desde el primer turno.
+
+### Tabla analisis_alerta
+
+Registro completo de cada sesión de análisis:
+
+```sql
+CREATE TABLE analisis_alerta (
+    id              BIGSERIAL    PRIMARY KEY,
+    alerta_id       BIGINT       NOT NULL REFERENCES alertas(id),
+    ople_id         VARCHAR(100) NOT NULL,
+    inicio          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    fin             TIMESTAMPTZ,
+    decision        VARCHAR(20)  CHECK (decision IN ('confirmada', 'descartada', 'escalada', 'pendiente')),
+    justificacion   VARCHAR(500),   -- narrativa del OPLE, máx 500 caracteres
+    historial_raw   JSONB           -- conversación completa turno a turno
+);
+```
+
+Si en una auditoría se pregunta "¿por qué se descartó esta alerta?", el `historial_raw` tiene cada pregunta del OPLE, cada respuesta del agente, cada tool que se llamó y cada nota que se consultó — con timestamp exacto.
+
+### Tabla notas_cliente
+
+Aportaciones internas de cualquier área sobre un cliente específico. No están ligadas a ninguna alerta — existen independientemente y el agente las consulta en cada análisis que involucre a ese cliente.
+
+```sql
+CREATE TABLE notas_cliente (
+    id          BIGSERIAL    PRIMARY KEY,
+    cliente_id  INT          NOT NULL REFERENCES espejo_clientes(id),
+    autor       VARCHAR(100) NOT NULL,
+    area        VARCHAR(20)  NOT NULL  -- 'compliance' | 'comercial' | 'riesgos' | 'operaciones' | 'direccion'
+    contenido   TEXT         NOT NULL,
+    creada_en   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+```
+
+Ejemplo de uso: el área comercial registra "cliente instruyó compra gradual de AMXL para no mover el precio, operación autorizada por dirección" antes de que el sistema detecte el structuring. Cuando el OPLE analiza la alerta, el agente trae esa nota y el OPLE tiene el elemento para descartar con justificación documentada.
 
 ---
 

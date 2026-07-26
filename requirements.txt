@@ -1,6 +1,7 @@
 # Agentes
 strands-agents
 boto3
+ollama
 
 # Base de datos
 psycopg2-binary

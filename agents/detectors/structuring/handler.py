@@ -212,4 +212,4 @@ def lambda_handler(event: dict, context) -> dict:
 
 
 if __name__ == "__main__":
-    run("2025-01-15")
+    run("2026-01-15")
