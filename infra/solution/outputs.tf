@@ -1,7 +1,4 @@
-output "rds_endpoint" {
-  value = aws_db_instance.main.endpoint
-}
-
-output "rds_port" {
-  value = aws_db_instance.main.port
+output "api_url" {
+  value       = aws_apigatewayv2_stage.default.invoke_url
+  description = "POST /analizar para invocar el orquestador"
 }

@@ -1,9 +1,6 @@
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-import sys
-sys.path.append(str(Path(__file__).resolve().parents[2]))
-
 from shared.db import query, execute
 
 FILTER_CASO1 = (Path(__file__).parent / "filter_caso1.sql").read_text()
